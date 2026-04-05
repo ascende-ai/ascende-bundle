@@ -3,9 +3,8 @@
 #
 # Hardening: verify PyInstaller output, Next standalone layout, and npm lockfiles before packaging.
 #
-# Private source repos: GITHUB_TOKEN only sees ascende-bundle. Clone of ascende-fronted / deepagent /
-# jurisprudence-search needs a PAT with read access to those repos. Add repo secret BUNDLE_CHECKOUT_TOKEN
-# (fine-grained: Contents read on each source repo, or classic PAT with repo scope).
+# Private source repos: set required repo secret BUNDLE_CHECKOUT_TOKEN (fine-grained PAT, Contents: Read
+# on ascende-fronted, ascende-deepagent, jurisprudence-search). The workflow verifies API access before git clone.
 
 name: Release desktop bundle
 
@@ -70,13 +69,46 @@ jobs:
           print("Pins - juris:", ju["repository"] + "@" + ju["ref"])
           PY
 
+      # Private repos: github.token cannot read ascende-fronted / deepagent / jurisprudence-search.
+      # Fail here with HTTP status instead of opaque "Repository not found" from git fetch.
+      - name: Verify BUNDLE_CHECKOUT_TOKEN can read all source repos
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.BUNDLE_CHECKOUT_TOKEN }}
+          REPO_FRONTEND: ${{ steps.pins.outputs.repo_frontend }}
+          REPO_DEEPAGENT: ${{ steps.pins.outputs.repo_deepagent }}
+          REPO_JURIS: ${{ steps.pins.outputs.repo_juris }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error title=Missing secret::Add repository secret BUNDLE_CHECKOUT_TOKEN on ascende-ai/ascende-bundle. Use a fine-grained PAT (Resource owner: ascende-ai) with Contents: Read on ascende-fronted, ascende-deepagent, and jurisprudence-search."
+            exit 1
+          fi
+          check_repo() {
+            local slug="$1"
+            local code
+            code=$(curl -sS -o /dev/null -w "%{http_code}" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${slug}")
+            echo "GitHub API GET /repos/${slug} -> HTTP ${code}"
+            if [ "${code}" != "200" ]; then
+              echo "::error title=Token cannot read ${slug}::Got HTTP ${code}. Edit the PAT: Repository access must include ${slug} and permission Contents: Read (Metadata read is automatic)."
+              exit 1
+            fi
+          }
+          check_repo "${REPO_FRONTEND}"
+          check_repo "${REPO_DEEPAGENT}"
+          check_repo "${REPO_JURIS}"
+
       - name: Checkout ascende-frontend
         uses: actions/checkout@v4
         with:
           repository: ${{ steps.pins.outputs.repo_frontend }}
           ref: ${{ steps.pins.outputs.ref_frontend }}
           path: ascende-frontend
-          token: ${{ secrets.BUNDLE_CHECKOUT_TOKEN != '' && secrets.BUNDLE_CHECKOUT_TOKEN || github.token }}
+          token: ${{ secrets.BUNDLE_CHECKOUT_TOKEN }}
 
       - name: Checkout ascende-deepagent
         uses: actions/checkout@v4
@@ -84,7 +116,7 @@ jobs:
           repository: ${{ steps.pins.outputs.repo_deepagent }}
           ref: ${{ steps.pins.outputs.ref_deepagent }}
           path: ascende-deepagent
-          token: ${{ secrets.BUNDLE_CHECKOUT_TOKEN != '' && secrets.BUNDLE_CHECKOUT_TOKEN || github.token }}
+          token: ${{ secrets.BUNDLE_CHECKOUT_TOKEN }}
 
       - name: Checkout jurisprudence-search
         uses: actions/checkout@v4
@@ -92,7 +124,7 @@ jobs:
           repository: ${{ steps.pins.outputs.repo_juris }}
           ref: ${{ steps.pins.outputs.ref_juris }}
           path: jurisprudence-search
-          token: ${{ secrets.BUNDLE_CHECKOUT_TOKEN != '' && secrets.BUNDLE_CHECKOUT_TOKEN || github.token }}
+          token: ${{ secrets.BUNDLE_CHECKOUT_TOKEN }}
 
       - name: Verify lockfiles exist
         shell: bash
