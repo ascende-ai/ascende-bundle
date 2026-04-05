@@ -1,10 +1,7 @@
 # Build ascende.ai desktop (Electron) with bundled ascende-deepagent binary and
-# jurisprudence-search standalone output. Trigger on version tags, e.g. v1.2.3.
+# jurisprudence-search standalone. Trigger on version tags, e.g. v1.2.3.
 #
-# Prerequisites:
-# - desktop-release.json at repo root: set repository slugs and pin `ref` to SHAs when releasing.
-# - Apple signing: optional; set secrets for notarization if required.
-# - electron-builder publish: ascende-frontend package.json publish config must match your releases repo.
+# Hardening: verify PyInstaller output, Next standalone layout, and npm lockfiles before packaging.
 
 name: Release desktop bundle
 
@@ -38,15 +35,24 @@ jobs:
         run: |
           set -euo pipefail
           python3 << 'PY'
-          import json, os
+          import json
+          import os
+          import sys
+
           with open("desktop-release.json", encoding="utf-8") as f:
               cfg = json.load(f)
-          for k in ("ascende-frontend", "ascende-deepagent", "jurisprudence-search"):
+
+          required = ("ascende-frontend", "ascende-deepagent", "jurisprudence-search")
+          for k in required:
               if k not in cfg:
-                  raise SystemExit(f"Missing key {k} in desktop-release.json")
-          fe = cfg["ascende-frontend"]
-          da = cfg["ascende-deepagent"]
-          ju = cfg["jurisprudence-search"]
+                  print(f"Missing key {k} in desktop-release.json", file=sys.stderr)
+                  sys.exit(1)
+              block = cfg[k]
+              if not isinstance(block, dict) or "repository" not in block or "ref" not in block:
+                  print(f"Invalid block for {k}: need repository and ref", file=sys.stderr)
+                  sys.exit(1)
+
+          fe, da, ju = cfg["ascende-frontend"], cfg["ascende-deepagent"], cfg["jurisprudence-search"]
           out = os.environ["GITHUB_OUTPUT"]
           with open(out, "a", encoding="utf-8") as g:
               g.write(f"repo_frontend={fe['repository']}\n")
@@ -55,6 +61,9 @@ jobs:
               g.write(f"ref_deepagent={da['ref']}\n")
               g.write(f"repo_juris={ju['repository']}\n")
               g.write(f"ref_juris={ju['ref']}\n")
+          print("Pins - frontend:", fe["repository"] + "@" + fe["ref"])
+          print("Pins - deepagent:", da["repository"] + "@" + da["ref"])
+          print("Pins - juris:", ju["repository"] + "@" + ju["ref"])
           PY
 
       - name: Checkout ascende-frontend
@@ -78,6 +87,13 @@ jobs:
           ref: ${{ steps.pins.outputs.ref_juris }}
           path: jurisprudence-search
 
+      - name: Verify lockfiles exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f ascende-frontend/package-lock.json || { echo "ascende-frontend: missing package-lock.json"; exit 1; }
+          test -f jurisprudence-search/package-lock.json || { echo "jurisprudence-search: missing package-lock.json"; exit 1; }
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -90,11 +106,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller
           pip install .
+          python -c "from ascende_deepagent.server.app import create_app; create_app()"
           pyinstaller scripts/ascende-backend.spec
           mkdir -p ../ascende-frontend/python-backend
           if [ "${{ matrix.platform }}" = "win" ]; then
+            test -f dist/ascende-backend.exe || { echo "PyInstaller did not produce dist/ascende-backend.exe"; ls -la dist || true; exit 1; }
             cp dist/ascende-backend.exe ../ascende-frontend/python-backend/
           else
+            test -f dist/ascende-backend || { echo "PyInstaller did not produce dist/ascende-backend"; ls -la dist || true; exit 1; }
             cp dist/ascende-backend ../ascende-frontend/python-backend/
             chmod +x ../ascende-frontend/python-backend/ascende-backend
           fi
@@ -103,7 +122,9 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: ascende-frontend/package-lock.json
+          cache-dependency-path: |
+            ascende-frontend/package-lock.json
+            jurisprudence-search/package-lock.json
 
       - name: Build jurisprudence-search (standalone)
         shell: bash
@@ -112,11 +133,13 @@ jobs:
           cd jurisprudence-search
           npm ci
           npm run build
+          test -f .next/standalone/server.js || { echo "Missing .next/standalone/server.js — check next.config standalone / outputFileTracingRoot"; exit 1; }
           mkdir -p .next/standalone/.next
           cp -R .next/static .next/standalone/.next/static
           if [ -d public ]; then cp -R public .next/standalone/public; fi
           rm -rf ../ascende-frontend/jurisprudence-standalone
           cp -R .next/standalone ../ascende-frontend/jurisprudence-standalone
+          test -f ../ascende-frontend/jurisprudence-standalone/server.js || { echo "Copy to jurisprudence-standalone failed"; exit 1; }
 
       - name: Install & build Electron app
         shell: bash
@@ -153,6 +176,7 @@ jobs:
       - name: Create GitHub Release with assets
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
           files: release-assets/**/*
           generate_release_notes: true
         env:
