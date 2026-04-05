@@ -14,6 +14,7 @@ The **jurisprudence-search** Next.js app is produced as a **standalone bundle on
    - **Fine-grained PAT** (recommended): create at [github.com/settings/tokens?type=beta](https://github.com/settings/tokens?type=beta) → Resource owner **ascende-ai** → Repository access **Only select repositories** → add **ascende-fronted**, **ascende-deepagent**, **jurisprudence-search** → Permissions **Repository: Contents** = **Read-only** → generate and paste into the secret.
    - Without this, the workflow stops in **Verify BUNDLE_CHECKOUT_TOKEN** with a clear error (default `GITHUB_TOKEN` cannot read other private repos).
 3. **Auto-update:** desktop builds and `electron-updater` expect GitHub Releases on **`ascende-ai/ascende-bundle`** (configured in `ascende-frontend`).
+4. **Repository visibility:** the **`ascende-bundle` repo itself must be Public** for end-user auto-update to work. GitHub returns **404** on `releases.atom` for **private** repos when the app has no user token; `electron-updater` cannot authenticate every user. CI can stay on private source repos via `BUNDLE_CHECKOUT_TOKEN`; only this orchestrator’s **releases** need to be world-readable.
 
 ## Trigger
 
