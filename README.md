@@ -2,7 +2,7 @@
 
 Remote: [github.com/ascende-ai/ascende-bundle](https://github.com/ascende-ai/ascende-bundle).
 
-Single place to **pin versions** of `ascende-frontend`, `ascende-deepagent`, and `jurisprudence-search`, then build macOS and Windows installers on every **version tag** (`v*`).
+Single place to **pin versions** of the desktop sources (`ascende-fronted` on GitHub — note the repo slug), `ascende-deepagent`, and `jurisprudence-search`, then build macOS and Windows installers on every **version tag** (`v*`).
 
 The **jurisprudence-search** Next.js app is produced as a **standalone bundle only to ship inside the desktop app**. It is not deployed as a public website; end users consume it through the Electron shell only.
 
