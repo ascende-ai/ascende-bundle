@@ -9,7 +9,7 @@ The **jurisprudence-search** Next.js app is produced as a **standalone bundle on
 ## Before you tag
 
 1. Edit `desktop-release.json`: pin each `ref` to a **full commit SHA** (recommended) or branch name.
-2. Ensure all three source repositories are readable by `GITHUB_TOKEN` (public repos work with the default token; private repos need a PAT with `contents: read` on each repo and pass it to `actions/checkout` `token:`).
+2. **Private repos:** the workflow cannot clone `ascende-fronted`, `ascende-deepagent`, or `jurisprudence-search` with the default `GITHUB_TOKEN` (it only has access to `ascende-bundle`). Add a repository secret **`BUNDLE_CHECKOUT_TOKEN`**: a fine-grained PAT with **Contents: Read** on those three repos (or a classic PAT with `repo` scope). If the secret is unset and all sources are **public**, the workflow falls back to `github.token`.
 3. **Auto-update:** desktop builds and `electron-updater` expect GitHub Releases on **`ascende-ai/ascende-bundle`** (configured in `ascende-frontend`).
 
 ## Trigger

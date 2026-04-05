@@ -2,6 +2,10 @@
 # jurisprudence-search standalone. Trigger on version tags, e.g. v1.2.3.
 #
 # Hardening: verify PyInstaller output, Next standalone layout, and npm lockfiles before packaging.
+#
+# Private source repos: GITHUB_TOKEN only sees ascende-bundle. Clone of ascende-fronted / deepagent /
+# jurisprudence-search needs a PAT with read access to those repos. Add repo secret BUNDLE_CHECKOUT_TOKEN
+# (fine-grained: Contents read on each source repo, or classic PAT with repo scope).
 
 name: Release desktop bundle
 
@@ -72,6 +76,7 @@ jobs:
           repository: ${{ steps.pins.outputs.repo_frontend }}
           ref: ${{ steps.pins.outputs.ref_frontend }}
           path: ascende-frontend
+          token: ${{ secrets.BUNDLE_CHECKOUT_TOKEN != '' && secrets.BUNDLE_CHECKOUT_TOKEN || github.token }}
 
       - name: Checkout ascende-deepagent
         uses: actions/checkout@v4
@@ -79,6 +84,7 @@ jobs:
           repository: ${{ steps.pins.outputs.repo_deepagent }}
           ref: ${{ steps.pins.outputs.ref_deepagent }}
           path: ascende-deepagent
+          token: ${{ secrets.BUNDLE_CHECKOUT_TOKEN != '' && secrets.BUNDLE_CHECKOUT_TOKEN || github.token }}
 
       - name: Checkout jurisprudence-search
         uses: actions/checkout@v4
@@ -86,6 +92,7 @@ jobs:
           repository: ${{ steps.pins.outputs.repo_juris }}
           ref: ${{ steps.pins.outputs.ref_juris }}
           path: jurisprudence-search
+          token: ${{ secrets.BUNDLE_CHECKOUT_TOKEN != '' && secrets.BUNDLE_CHECKOUT_TOKEN || github.token }}
 
       - name: Verify lockfiles exist
         shell: bash
