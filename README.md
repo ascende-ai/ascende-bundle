@@ -1,38 +1,48 @@
-# Ascende desktop release orchestrator
+# ascende-bundle
 
-Remote: [github.com/ascende-ai/ascende-bundle](https://github.com/ascende-ai/ascende-bundle).
+Desktop **release orchestrator** for Ascende: one place to **pin versions** (commits) of **ascende-frontend**, **ascende-deepagent**, and **jurisprudence-search**, and produce **macOS** and **Windows** installers on every `v*` **tag**.
 
-Single place to **pin versions** of the desktop sources (`ascende-fronted` on GitHub — note the repo slug), `ascende-deepagent`, and `jurisprudence-search`, then build macOS and Windows installers on every **version tag** (`v*`).
+Upstream repository: [github.com/ascende-ai/ascende-bundle](https://github.com/ascende-ai/ascende-bundle).
 
-The **jurisprudence-search** Next.js app is produced as a **standalone bundle only to ship inside the desktop app**. It is not deployed as a public website; end users consume it through the Electron shell only.
+The **jurisprudence-search** app is built as **Next.js standalone** only to be **embedded in Electron** (`extraResources`), not as a separate public website.
 
 ## Before you tag
 
-1. Edit `desktop-release.json`: pin each `ref` to a **full commit SHA** (recommended) or branch name.
-2. **Private repos (current setup):** you **must** add repository secret **`BUNDLE_CHECKOUT_TOKEN`** on `ascende-ai/ascende-bundle`.
-   - GitHub → **Settings → Secrets and variables → Actions → New repository secret** → name `BUNDLE_CHECKOUT_TOKEN`.
-   - **Fine-grained PAT** (recommended): create at [github.com/settings/tokens?type=beta](https://github.com/settings/tokens?type=beta) → Resource owner **ascende-ai** → Repository access **Only select repositories** → add **ascende-fronted**, **ascende-deepagent**, **jurisprudence-search** → Permissions **Repository: Contents** = **Read-only** → generate and paste into the secret.
-   - Without this, the workflow stops in **Verify BUNDLE_CHECKOUT_TOKEN** with a clear error (default `GITHUB_TOKEN` cannot read other private repos).
-3. **Auto-update:** desktop builds and `electron-updater` expect GitHub Releases on **`ascende-ai/ascende-bundle`** (configured in `ascende-frontend`).
-4. **Repository visibility:** the **`ascende-bundle` repo itself must be Public** for end-user auto-update to work. GitHub returns **404** on `releases.atom` for **private** repos when the app has no user token; `electron-updater` cannot authenticate every user. CI can stay on private source repos via `BUNDLE_CHECKOUT_TOKEN`; only this orchestrator’s **releases** need to be world-readable.
+1. Edit **`desktop-release.json`**: set each `ref` to a **full commit SHA** (recommended) or a branch name for reproducible builds.
+2. **Private repositories:** add the **`BUNDLE_CHECKOUT_TOKEN`** secret to this GitHub repository.
+   - **Settings → Secrets and variables → Actions → New repository secret** → name `BUNDLE_CHECKOUT_TOKEN`.
+   - **Fine-grained PAT** (recommended): [github.com/settings/tokens?type=beta](https://github.com/settings/tokens?type=beta) → resource owner **ascende-ai** → only the repos you need → **Repository contents: Read-only** → paste the token into the secret.
+   - The default Actions `GITHUB_TOKEN` **cannot** read other private repos; without this secret, the workflow fails at the verification step.
+3. **Auto-update:** desktop builds and **electron-updater** expect **GitHub Releases** on this repo (**ascende-bundle**), as configured in **ascende-frontend**.
+4. **Visibility:** **ascende-bundle** is usually **public** so the release feed is reachable without a per-user token. Source repos can stay private via `BUNDLE_CHECKOUT_TOKEN`.
 
-## Trigger
+> In `desktop-release.json`, the frontend `repository` field points at the GitHub slug **`ascende-ai/ascende-fronted`** (historical repo name); your local checkout folder may still be named `ascende-frontend`.
+
+## Trigger a release
 
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-The workflow builds PyInstaller `ascende-backend`, Next standalone for jurisprudence, then Electron; uploads job artifacts and attaches them to a GitHub Release for the tag.
+The workflow builds the **PyInstaller** binary (`ascende-backend`), the jurisprudence **standalone** bundle, then **Electron**; uploads artifacts and attaches them to the GitHub Release for the tag.
 
 ## Pre-release checklist
 
-1. **Pin SHAs** in `desktop-release.json` (not only `main`) for anything you ship to users.
-2. **PyInstaller** is built per OS in CI. If the app starts but crashes on import, extend `scripts/ascende-backend.spec` (`collect_all` / `hiddenimports`). Local repro: from `ascende-deepagent`, `pip install . pyinstaller` then `pyinstaller scripts/ascende-backend.spec`, run `dist/ascende-backend` with `PORT=8010`.
-3. **Next standalone** must contain `server.js` at the root of the copied tree; the workflow fails early if it is missing (usually fixed by `outputFileTracingRoot` in `jurisprudence-search`).
-4. **Lockfiles** must exist: `package-lock.json` in both frontend and jurisprudence repos (`npm ci` in CI).
-5. **electron-updater** metadata (`latest-mac.yml`, etc.) is produced by `electron-builder` into `ascende-frontend/release/` and should be uploaded with the installers (artifacts + release job).
+1. **Pinned SHAs** in `desktop-release.json` for anything shipped to users.
+2. **PyInstaller:** if the app launches but crashes on import, adjust `scripts/ascende-backend.spec` in **ascende-deepagent** (`hiddenimports` / `collect_all`). Local repro: `pip install . pyinstaller` then `pyinstaller scripts/ascende-backend.spec`.
+3. **Next standalone:** the copied tree must include `server.js` at the root; if it does not, fix **`outputFileTracingRoot`** in **jurisprudence-search**.
+4. **Lockfiles:** `package-lock.json` must exist in **ascende-frontend** and **jurisprudence-search** (CI uses `npm ci`).
+5. **electron-updater:** metadata (`latest-mac.yml`, etc.) produced under `ascende-frontend/release/` should be uploaded with the installers.
 
 ## Local parity (optional)
 
-Roughly mirrors CI: build the backend binary into `ascende-frontend/python-backend/`, copy the jurisprudence standalone tree into `ascende-frontend/jurisprudence-standalone/`, then from the frontend run `npm run build`.
+Mirror CI: place the backend binary under `ascende-frontend/python-backend/`, copy the jurisprudence standalone tree into `ascende-frontend/jurisprudence-standalone/`, then from the frontend repo run `npm run build`.
+
+## Ecosystem
+
+| Repository | Role in the bundle |
+|------------|-------------------|
+| **ascende-frontend** | Electron app, UI, updater |
+| **ascende-deepagent** | API + PyInstaller spec |
+| **jurisprudence-search** | Embedded web UI (standalone) |
