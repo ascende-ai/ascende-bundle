@@ -191,12 +191,18 @@ jobs:
           npm ci
           npx tsc && npx vite build && npx electron-builder --publish never
 
-      - name: Upload artifacts
+      # Ship only installer + updater metadata. Do not upload win-unpacked/ or .app trees — thousands
+      # of files trigger GitHub secondary rate limits and duplicate-name races on the release API.
+      - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.platform }}-${{ github.ref_name }}
           path: |
-            ascende-frontend/release/*
+            ascende-frontend/release/*.dmg
+            ascende-frontend/release/*.zip
+            ascende-frontend/release/*.exe
+            ascende-frontend/release/*.blockmap
+            ascende-frontend/release/latest*.yml
           if-no-files-found: error
 
   publish-release:
@@ -216,7 +222,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          files: release-assets/**/*
+          files: |
+            release-assets/*.dmg
+            release-assets/*.zip
+            release-assets/*.exe
+            release-assets/*.blockmap
+            release-assets/latest*.yml
           generate_release_notes: true
+          overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
