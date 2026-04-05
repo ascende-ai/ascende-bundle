@@ -1,0 +1,159 @@
+# Build ascende.ai desktop (Electron) with bundled ascende-deepagent binary and
+# jurisprudence-search standalone output. Trigger on version tags, e.g. v1.2.3.
+#
+# Prerequisites:
+# - desktop-release.json at repo root: set repository slugs and pin `ref` to SHAs when releasing.
+# - Apple signing: optional; set secrets for notarization if required.
+# - electron-builder publish: ascende-frontend package.json publish config must match your releases repo.
+
+name: Release desktop bundle
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+          - os: windows-latest
+            platform: win
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout orchestrator
+        uses: actions/checkout@v4
+
+      - name: Parse desktop-release.json
+        id: pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          import json, os
+          with open("desktop-release.json", encoding="utf-8") as f:
+              cfg = json.load(f)
+          for k in ("ascende-frontend", "ascende-deepagent", "jurisprudence-search"):
+              if k not in cfg:
+                  raise SystemExit(f"Missing key {k} in desktop-release.json")
+          fe = cfg["ascende-frontend"]
+          da = cfg["ascende-deepagent"]
+          ju = cfg["jurisprudence-search"]
+          out = os.environ["GITHUB_OUTPUT"]
+          with open(out, "a", encoding="utf-8") as g:
+              g.write(f"repo_frontend={fe['repository']}\n")
+              g.write(f"ref_frontend={fe['ref']}\n")
+              g.write(f"repo_deepagent={da['repository']}\n")
+              g.write(f"ref_deepagent={da['ref']}\n")
+              g.write(f"repo_juris={ju['repository']}\n")
+              g.write(f"ref_juris={ju['ref']}\n")
+          PY
+
+      - name: Checkout ascende-frontend
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.pins.outputs.repo_frontend }}
+          ref: ${{ steps.pins.outputs.ref_frontend }}
+          path: ascende-frontend
+
+      - name: Checkout ascende-deepagent
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.pins.outputs.repo_deepagent }}
+          ref: ${{ steps.pins.outputs.ref_deepagent }}
+          path: ascende-deepagent
+
+      - name: Checkout jurisprudence-search
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.pins.outputs.repo_juris }}
+          ref: ${{ steps.pins.outputs.ref_juris }}
+          path: jurisprudence-search
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install & build ascende-backend (PyInstaller)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ascende-deepagent
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install .
+          pyinstaller scripts/ascende-backend.spec
+          mkdir -p ../ascende-frontend/python-backend
+          if [ "${{ matrix.platform }}" = "win" ]; then
+            cp dist/ascende-backend.exe ../ascende-frontend/python-backend/
+          else
+            cp dist/ascende-backend ../ascende-frontend/python-backend/
+            chmod +x ../ascende-frontend/python-backend/ascende-backend
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ascende-frontend/package-lock.json
+
+      - name: Build jurisprudence-search (standalone)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd jurisprudence-search
+          npm ci
+          npm run build
+          mkdir -p .next/standalone/.next
+          cp -R .next/static .next/standalone/.next/static
+          if [ -d public ]; then cp -R public .next/standalone/public; fi
+          rm -rf ../ascende-frontend/jurisprudence-standalone
+          cp -R .next/standalone ../ascende-frontend/jurisprudence-standalone
+
+      - name: Install & build Electron app
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          set -euo pipefail
+          cd ascende-frontend
+          npm ci
+          npx tsc && npx vite build && npx electron-builder --publish never
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.platform }}-${{ github.ref_name }}
+          path: |
+            ascende-frontend/release/*
+          if-no-files-found: error
+
+  publish-release:
+    name: Attach installers to GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all workflow artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: desktop-*-${{ github.ref_name }}
+          merge-multiple: true
+
+      - name: Create GitHub Release with assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/**/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
