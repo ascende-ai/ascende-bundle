@@ -2,7 +2,7 @@
   "comment": "Pin full SHAs for reproducible installers. jurisprudence-search is built only as an embedded desktop payload (Next standalone inside the Electron app), not for public web hosting.",
   "ascende-frontend": {
     "repository": "ascende-ai/ascende-fronted",
-    "ref": "e9d6145298d5dc3cc641e4376159898bfe4d018c"
+    "ref": "602ef67510209b1c29b072a959ece9acc4b3bf80"
   },
   "ascende-deepagent": {
     "repository": "ascende-ai/ascende-deepagent",
