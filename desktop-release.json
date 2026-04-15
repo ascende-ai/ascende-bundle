@@ -2,7 +2,7 @@
   "comment": "Pin full SHAs for reproducible installers. Sync policy: ascende-frontend tracks origin/enhancement/agent-streaming; ascende-deepagent tracks origin/enhancement/agent-harness-engineering (includes POST /chat/enhance-prompt; do not pin deepagent to origin/main until that route is merged). jurisprudence-search tracks origin/main and is built only as an embedded desktop payload (Next standalone inside the Electron app), not for public web hosting.",
   "ascende-frontend": {
     "repository": "ascende-ai/ascende-fronted",
-    "ref": "920e49eb669e7e805e57432b632e8f0153bfeba4"
+    "ref": "4990272d7a2eaf83bf39edb9f733017536a5d9c8"
   },
   "ascende-deepagent": {
     "repository": "ascende-ai/ascende-deepagent",
